@@ -1,115 +1,123 @@
-/*
-环境测试:
-  1. 互助码api访问测试
-  2. 脚本版本检测
-时间: 2021-06-16-
+/**
+ 更新时间：2021-06-31
+ 已支持IOS双京东账号,Node.js支持N个京东账号
+ 脚本兼容: QuantumultX, Surge, Loon, JSBox, Node.js
+ ==========================Quantumultx=========================
+ [task_local]
+ #嗯
+ * * * * * jd_logout.js, tag=嗯, img-url=https://raw.githubusercontent.com/JDHelloWorld/jd_scripts/main/icon/jd_logout.png, enabled=true
+ =========================Loon=============================
+ [Script]
+ cron "* * * * *" script-path=jd_logout.js,tag=嗯
 
-脚本兼容: QuantumultX, Surge, Loon, JSBox, Node.js
-===================quantumultx================
-[task_local]
-#环境测试
-0 12 * * * jd_api_test.js, tag=环境测试, enabled=true
+ =========================Surge============================
+ 嗯 = type=cron,cronexp="* * * * *",wake-system=1,timeout=3600,script-path=jd_logout.js
 
-=====================Loon================
-[Script]
-cron "0 12 * * *" script-path=jd_api_test.js, tag=环境测试
+ =========================小火箭===========================
+ 嗯 = type=cron,script-path=jd_logout.js, cronexpr="* * * * *", timeout=3600, enable=true
 
-====================Surge================
-环境测试 = type=cron,cronexp=0 12 * * *,wake-system=1,timeout=3600,script-path=jd_api_test.js
+ */
 
-============小火箭=========
-环境测试 = type=cron,script-path=jd_api_test.js, cronexpr="0 12 * * *", timeout=3600, enable=true
-*/
-
-console.log(`==================脚本执行- 北京时间(UTC+8)：${new Date(new Date().getTime() + new Date().getTimezoneOffset() * 60 * 1000 + 8 * 60 * 60 * 1000).toLocaleString()}=====================\n`)
-
-const $ = new Env("环境测试")
-
-$.version = '0.1'
-
+const $ = new Env('嗯嗯');
+const jdCookieNode = $.isNode() ? require('./jdCookie.js') : '';
+let cookiesArr = [], cookie = '', message;
+if ($.isNode()) {
+  Object.keys(jdCookieNode).forEach((item) => {
+    cookiesArr.push(jdCookieNode[item])
+  })
+  if (process.env.JD_DEBUG && process.env.JD_DEBUG === 'false') console.log = () => {
+  };
+  if (JSON.stringify(process.env).indexOf('GITHUB') > -1) process.exit(0);
+} else {
+  cookiesArr = [$.getdata('CookieJD'), $.getdata('CookieJD2'), ...jsonParse($.getdata('CookiesJD') || "[]").map(item => item.cookie)].filter(item => !!item);
+}
 !(async () => {
-  await getRandomCode();
-
-  await version();
-
+  if (!cookiesArr[0]) {
+    $.msg($.name, '【提示】请先获取京东账号一cookie\n直接使用NobyDa的京东签到获取', 'https://bean.m.jd.com/bean/signIndex.action', {"open-url": "https://bean.m.jd.com/bean/signIndex.action"});
+    return;
+  }
+  for (let i = 0; i < cookiesArr.length; i++) {
+    if (cookiesArr[i]) {
+      cookie = cookiesArr[i];
+      $.UserName = decodeURIComponent(cookie.match(/pt_pin=([^; ]+)(?=;?)/) && cookie.match(/pt_pin=([^; ]+)(?=;?)/)[1])
+      $.index = i + 1;
+      $.isLogin = true;
+      $.nickName = '';
+      message = '';
+      await TotalBean();
+      console.log(`\n******开始【京东账号${$.index}】${$.nickName || $.UserName}*********\n`);
+      if (!$.isLogin) {
+        // $.msg($.name, `【提示】cookie已失效`, `京东账号${$.index} ${$.nickName || $.UserName}\n请重新登录获取\nhttps://bean.m.jd.com/bean/signIndex.action`, {"open-url": "https://bean.m.jd.com/bean/signIndex.action"});
+        continue
+      } else {
+        continue
+        $.get({
+          url: `https://plogin.m.jd.com/cgi-bin/ml/mlogout?appid=300&returnurl=https%3A%2F%2Fm.jd.com%2F`,
+          headers: {
+            'authority': 'plogin.m.jd.com',
+            "User-Agent": $.isNode() ? (process.env.JD_USER_AGENT ? process.env.JD_USER_AGENT : (require('./USER_AGENTS').USER_AGENT)) : ($.getdata('JDUA') ? $.getdata('JDUA') : "jdapp;iPhone;9.4.4;14.3;network/4g;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1"),
+            'cookie': cookie
+          }
+        })
+      }
+    }
+  }
 })()
 
-function getRandomCode() {
-  return new Promise(resolve => {
-    let cars = ['bean', 'farm', 'health', 'jxfactory', 'pet'];
-    let db = cars[Math.floor(Math.random() * 5)]
-    let num = Math.floor(Math.random() * 20 + 5)
-    console.log(`本次随机选择${db}获取${num}个随机助力码`)
-    $.get({url: `http://api.sharecode.ga/api/${db}/${num}`, timeout: 3000}, (err, resp, data) => {
-      try {
-        if (data) {
-          data = JSON.parse(data)
-          console.log(JSON.stringify(data, null, '  '))
-          if (data.code === 200) {
-            if (data.data.length === num) {
-              console.log(`成功获取${num}个`)
-            }
-          }
-        } else {
-          // $.msg("JDHelloWorld", "获取助力池失败！", `请手动访问http://api.sharecode.ga/api/version`, {"open-url": "http://api.sharecode.ga/api/version"})
-          $.msg("JDHelloWorld", "获取助力池失败！", '请检查网络！')
-          if ($.isNode()) {
-            const notify = require('./sendNotify')
-            notify.sendNotify("JDHelloWorld", `获取助力池失败！请检查网络！`)
-          }
-          $.logErr("获取助力池失败！请检查网络！\n")
-        }
-      } catch (e) {
-        $.msg("JDHelloWorld", "获取助力池失败！", '请检查网络！')
-        if ($.isNode()) {
-            const notify = require('./sendNotify')
-            notify.sendNotify("JDHelloWorld", `获取助力池失败！请检查网络！`)
-          }
-        $.logErr("获取助力池失败！请检查网络！\n")
-      } finally {
-        resolve()
+function TotalBean() {
+  return new Promise(async resolve => {
+    const options = {
+      url: "https://me-api.jd.com/user_new/info/GetJDUserInfoUnion",
+      headers: {
+        Host: "me-api.jd.com",
+        Accept: "*/*",
+        Connection: "keep-alive",
+        Cookie: cookie,
+        "User-Agent": $.isNode() ? (process.env.JD_USER_AGENT ? process.env.JD_USER_AGENT : (require('./USER_AGENTS').USER_AGENT)) : ($.getdata('JDUA') ? $.getdata('JDUA') : "jdapp;iPhone;9.4.4;14.3;network/4g;Mozilla/5.0 (iPhone; CPU iPhone OS 14_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148;supportJDSHWK/1"),
+        "Accept-Language": "zh-cn",
+        "Referer": "https://home.m.jd.com/myJd/newhome.action?sceneval=2&ufc=&",
+        "Accept-Encoding": "gzip, deflate, br"
       }
-    })
-  })
-}
-
-function version() {
-  return new Promise(resolve => {
-    console.log('\n开始版本检测......')
-    $.get({url: `http://api.sharecode.ga/api/version`, timeout: 3000}, (err, resp, data) => {
+    }
+    $.get(options, (err, resp, data) => {
       try {
-        if (data) {
-          console.log(`本地：${$.version}\n远程：${data}`)
-          if (data === $.version) {
-            console.log('已是最新版本')
+        if (err) {
+          $.logErr(err)
+        } else {
+          if (data) {
+            data = JSON.parse(data);
+            if (data['retcode'] === "1001") {
+              $.isLogin = false; //cookie过期
+              return;
+            }
+            if (data['retcode'] === "0" && data.data && data.data.hasOwnProperty("userInfo")) {
+              $.nickName = data.data.userInfo.baseInfo.nickname;
+            }
           } else {
-            $.msg("JDHelloWorld", "请更新！", `本地：${$.version}\n远程：${data}`)
-            if ($.isNode()) {
-              const notify = require('./sendNotify')
-              notify.sendNotify("JDHelloWorld", `本地：${$.version}\n远程：${data}\n\n请及时更新！`)
-            }
-          }
-        } else {
-          $.msg("JDHelloWorld", "版本检测失败", `请手动访问 http://api.sharecode.ga/api/version 测试网络`, {"open-url": "http://api.sharecode.ga/api/version"})
-          if ($.isNode()) {
-            const notify = require('./sendNotify')
-            notify.sendNotify("JDHelloWorld", `版本检测失败\n请手动访问\nhttp://api.sharecode.ga/api/version\n测试网络`)
+            $.log('京东服务器返回空数据');
           }
         }
       } catch (e) {
-        $.msg("JDHelloWorld", "版本检测失败", `请手动访问 http://api.sharecode.ga/api/version 测试网络`, {"open-url": "http://api.sharecode.ga/api/version"})
-        if ($.isNode()) {
-          const notify = require('./sendNotify')
-          notify.sendNotify("JDHelloWorld", `版本检测失败\n请手动访问\nhttp://api.sharecode.ga/api/version 测试网络`)
-        }
+        $.logErr(e)
       } finally {
-        resolve()
+        resolve();
       }
     })
   })
 }
 
-// prettier-ignore
+function jsonParse(str) {
+  if (typeof str == "string") {
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      console.log(e);
+      $.msg($.name, '', '请勿随意在BoxJs输入框修改内容\n建议通过脚本去获取cookie')
+      return [];
+    }
+  }
+}
+
 function Env(t, e) {
   "undefined" != typeof process && JSON.stringify(process.env).indexOf("GITHUB") > -1 && process.exit(0);
 
@@ -204,7 +212,11 @@ function Env(t, e) {
         i = i ? i.replace(/\n/g, "").trim() : i;
         let r = this.getdata("@chavy_boxjs_userCfgs.httpapi_timeout");
         r = r ? 1 * r : 20, r = e && e.timeout ? e.timeout : r;
-        const [o, h] = i.split("@"), n = {url: `http://${h}/v1/scripting/evaluate`, body: {script_text: t, mock_type: "cron", timeout: r}, headers: {"X-Key": o, Accept: "*/*"}};
+        const [o, h] = i.split("@"), n = {
+          url: `http://${h}/v1/scripting/evaluate`,
+          body: {script_text: t, mock_type: "cron", timeout: r},
+          headers: {"X-Key": o, Accept: "*/*"}
+        };
         this.post(n, (t, e, i) => s(i))
       }).catch(t => this.logErr(t))
     }
@@ -213,7 +225,8 @@ function Env(t, e) {
       if (!this.isNode()) return {};
       {
         this.fs = this.fs ? this.fs : require("fs"), this.path = this.path ? this.path : require("path");
-        const t = this.path.resolve(this.dataFile), e = this.path.resolve(process.cwd(), this.dataFile), s = this.fs.existsSync(t), i = !s && this.fs.existsSync(e);
+        const t = this.path.resolve(this.dataFile), e = this.path.resolve(process.cwd(), this.dataFile),
+          s = this.fs.existsSync(t), i = !s && this.fs.existsSync(e);
         if (!s && !i) return {};
         {
           const i = s ? t : e;
@@ -229,7 +242,8 @@ function Env(t, e) {
     writedata() {
       if (this.isNode()) {
         this.fs = this.fs ? this.fs : require("fs"), this.path = this.path ? this.path : require("path");
-        const t = this.path.resolve(this.dataFile), e = this.path.resolve(process.cwd(), this.dataFile), s = this.fs.existsSync(t), i = !s && this.fs.existsSync(e), r = JSON.stringify(this.data);
+        const t = this.path.resolve(this.dataFile), e = this.path.resolve(process.cwd(), this.dataFile),
+          s = this.fs.existsSync(t), i = !s && this.fs.existsSync(e), r = JSON.stringify(this.data);
         s ? this.fs.writeFileSync(t, r) : i ? this.fs.writeFileSync(e, r) : this.fs.writeFileSync(t, r)
       }
     }
@@ -333,7 +347,15 @@ function Env(t, e) {
 
     time(t, e = null) {
       const s = e ? new Date(e) : new Date;
-      let i = {"M+": s.getMonth() + 1, "d+": s.getDate(), "H+": s.getHours(), "m+": s.getMinutes(), "s+": s.getSeconds(), "q+": Math.floor((s.getMonth() + 3) / 3), S: s.getMilliseconds()};
+      let i = {
+        "M+": s.getMonth() + 1,
+        "d+": s.getDate(),
+        "H+": s.getHours(),
+        "m+": s.getMinutes(),
+        "s+": s.getSeconds(),
+        "q+": Math.floor((s.getMonth() + 3) / 3),
+        S: s.getMilliseconds()
+      };
       /(y+)/.test(t) && (t = t.replace(RegExp.$1, (s.getFullYear() + "").substr(4 - RegExp.$1.length)));
       for (let e in i) new RegExp("(" + e + ")").test(t) && (t = t.replace(RegExp.$1, 1 == RegExp.$1.length ? i[e] : ("00" + i[e]).substr(("" + i[e]).length)));
       return t
